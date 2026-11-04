@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>오늘의 등산</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#0e1420;--fg:#f2f5fa;--panel:rgba(14,20,32,.86);--acc:#ff9f43;--line:rgba(255,255,255,.18)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,-apple-system,"Noto Sans KR",sans-serif;display:flex;flex-direction:column;overflow:hidden;overscroll-behavior:none}
+header{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+header b{font-size:17px}header span{opacity:.85;font-size:13px}
+input,select,button{font:inherit;color:var(--fg);background:rgba(255,255,255,.1);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+button{cursor:pointer;touch-action:manipulation;user-select:none}
+button.p{background:var(--acc);color:#1b1206;border-color:transparent;font-weight:700}
+button:disabled{opacity:.4;cursor:default}
+#nm{width:100px}
+#stage{flex:1;min-height:0;position:relative;touch-action:none;user-select:none}
+#gl{width:100%;height:100%;display:block}
+#js{position:absolute;left:18px;bottom:18px;width:130px;height:130px;border-radius:50%;background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.35);touch-action:none}
+#kn{position:absolute;left:35px;top:35px;width:60px;height:60px;border-radius:50%;background:rgba(255,255,255,.55);box-shadow:0 2px 8px rgba(0,0,0,.4);pointer-events:none}
+#hint{position:absolute;left:50%;top:10px;transform:translateX(-50%);font-size:12px;background:var(--panel);padding:4px 12px;border-radius:14px;opacity:.85;white-space:nowrap}
+#tg{position:absolute;right:14px;bottom:18px;width:52px;height:52px;border-radius:50%;font-size:22px;padding:0}
+#chat{position:absolute;right:12px;bottom:78px;width:min(340px,calc(100% - 24px));height:min(36vh,260px);background:var(--panel);border:1px solid var(--line);border-radius:14px;display:none;flex-direction:column}
+#log{flex:1;overflow-y:auto;padding:8px 12px;font-size:14px}
+#log div{margin:2px 0;word-break:break-word}#log .me b{color:var(--acc)}#log .sys{opacity:.6;font-size:13px}
+#cf{display:flex;gap:6px;padding:6px}#cf input{flex:1;min-width:0}
+#bar{display:flex;gap:10px;padding:8px 12px;background:var(--panel);align-items:center;border-top:1px solid var(--line)}
+#prog{flex:1;height:8px;background:var(--line);border-radius:6px;overflow:hidden}
+#prog i{display:block;height:100%;width:0;background:var(--acc)}
+#ov{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;z-index:9}
+#ov img{max-width:100%;max-height:68vh;border-radius:12px}#ov div{display:flex;gap:10px}
+#toast{position:absolute;left:50%;top:44px;transform:translateX(-50%);background:var(--panel);padding:8px 16px;border-radius:20px;display:none;white-space:nowrap;z-index:2}
+</style></head>
+<body>
+<header><b>⛰️ 오늘의 등산</b><span id="mt"></span><span id="cnt"></span><span id="clk"></span>
+<input id="nm" maxlength="10" placeholder="닉네임" aria-label="닉네임">
+<select id="tm" aria-label="시간대"><option value="auto">자동(현재 시각)</option><option value="9">아침</option><option value="17.5">노을</option><option value="23">밤</option></select></header>
+<div id="stage"><canvas id="gl"></canvas><div id="hint"></div><div id="toast"></div>
+<div id="js"><div id="kn"></div></div>
+<button id="tg" aria-label="채팅 열기">💬</button>
+<div id="chat"><div id="log"></div><div id="cf"><input id="ci" maxlength="200" placeholder="메시지 입력" aria-label="메시지"><button id="cs">전송</button></div></div></div>
+<div id="bar"><span id="pc"></span><div id="prog"><i></i></div><button id="cam" class="p" disabled>📷 정상 인증샷</button><input id="file" type="file" accept="image/*" capture="environment" hidden></div>
+<div id="ov"><img id="pv" alt="인증샷 미리보기"><div><button id="sv" class="p">저장</button><button id="cl">닫기</button></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const $=s=>document.querySelector(s),clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+const MT=[["한라산",1947],["설악산",1708],["지리산",1915],["북한산",836],["관악산",632],["덕유산",1614],["오대산",1563],["소백산",1439],["계룡산",845],["태백산",1567],["팔공산",1193],["무등산",1187]];
+function rng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const D0=new Date(),ds=D0.getFullYear()*10000+(D0.getMonth()+1)*100+D0.getDate();
+const R=rng(ds),mt=MT[Math.floor(R()*MT.length)],P=[R()*6,R()*6,R()*6],A0=R()*6.283,alt=mt[1]/1947,PH=30+45*alt,D0S=260;
+$('#mt').textContent=`${mt[0]} ${mt[1].toLocaleString()}m`;
+const hAt=(x,z)=>{const r=Math.hypot(x,z),g=Math.exp(-r*r/33800);const n=Math.sin(x*.09+P[0])*Math.cos(z*.08+P[1])*2.2+Math.sin(x*.21+P[2])*Math.sin(z*.19+P[0])*.9+Math.sin((x+z)*.04+P[1])*3;return PH*g+n*(.3+.7*Math.min(1,r/80))-(r>285?(r-285)*.8:0)};
+const hex=h=>[1,3,5].map(i=>parseInt(h.substr(i,2),16));
+const K=[[0,'#050816','#121a3a'],[5,'#0b1030','#2a2a5a'],[7,'#4a90d9','#ffd9a0'],[12,'#3b8de0','#bfe3ff'],[15,'#5a7fd0','#ffc58a'],[17.5,'#6a3f8f','#ff7a45'],[19.5,'#1a1640','#3a2050'],[21,'#050816','#121a3a'],[24,'#050816','#121a3a']];
+function sky(h){let i=0;while(i<K.length-2&&h>=K[i+1][0])i++;const a=K[i],b=K[i+1],t=(h-a[0])/(b[0]-a[0]),m=(x,y)=>{const p=hex(x),q=hex(y);return p.map((v,j)=>v+(q[j]-v)*t|0)};return[m(a[1],b[1]),m(a[2],b[2])]}
+const starA=h=>h<5?1:h<7?1-(h-5)/2:h<18.5?0:h<20.5?(h-18.5)/2:1;
+const css=c=>`rgb(${c})`;
+// ---- three.js
+const cv=$('#gl'),rd=new THREE.WebGLRenderer({canvas:cv,antialias:true,preserveDrawingBuffer:true});
+rd.setPixelRatio(Math.min(devicePixelRatio||1,2));
+const sc=new THREE.Scene(),cam=new THREE.PerspectiveCamera(60,1,.3,1000);
+sc.fog=new THREE.Fog(0x888888,80,420);
+const bgc=document.createElement('canvas');bgc.width=2;bgc.height=256;const bgx=bgc.getContext('2d'),bgt=new THREE.CanvasTexture(bgc);sc.background=bgt;
+const hemi=new THREE.HemisphereLight(0xffffff,0x334433,.8),sun=new THREE.DirectionalLight(0xffffff,1);sc.add(hemi,sun,sun.target);
+// terrain
+const geo=new THREE.PlaneGeometry(600,600,220,220);geo.rotateX(-Math.PI/2);
+const pos=geo.attributes.position;for(let i=0;i<pos.count;i++)pos.setY(i,hAt(pos.getX(i),pos.getZ(i)));
+geo.computeVertexNormals();
+const col=new Float32Array(pos.count*3),nrm=geo.attributes.normal,cc=new THREE.Color();
+for(let i=0;i<pos.count;i++){const y=pos.getY(i),t=y/PH,ny=nrm.getY(i);
+ if(ny<.78)cc.set('#8b8478');else if(t>.88&&alt>.65)cc.set('#f1f4f6');else cc.set('#4d8a4a').lerp(new THREE.Color('#8c9a68'),clamp(t*1.3,0,1));
+ if(y<-3)cc.set('#5b6b4a');cc.toArray(col,i*3)}
+geo.setAttribute('color',new THREE.BufferAttribute(col,3));
+sc.add(new THREE.Mesh(geo,new THREE.MeshLambertMaterial({vertexColors:true,flatShading:true})));
+// trees
+const TR=rng(ds+3),tg=new THREE.ConeGeometry(1.2,3.6,7),trees=new THREE.InstancedMesh(tg,new THREE.MeshLambertMaterial({color:'#2d5a34'}),900),dm=new THREE.Object3D();let tn=0;
+for(let i=0;i<3000&&tn<900;i++){const a=TR()*6.283,r=6+TR()*270,x=Math.cos(a)*r,z=Math.sin(a)*r,y=hAt(x,z);if(y>PH*.55||y<-2)continue;dm.position.set(x,y+1.8,z);dm.scale.setScalar(.8+TR()*.7);dm.updateMatrix();trees.setMatrixAt(tn++,dm.matrix)}
+trees.count=tn;sc.add(trees);
+// flag
+const fl=new THREE.Group(),pole=new THREE.Mesh(new THREE.CylinderGeometry(.08,.08,5,6),new THREE.MeshLambertMaterial({color:'#ddd'})),cl=new THREE.Mesh(new THREE.PlaneGeometry(2,1.2),new THREE.MeshLambertMaterial({color:'#ff4d40',side:THREE.DoubleSide}));
+pole.position.y=2.5;cl.position.set(1,4.4,0);fl.add(pole,cl);fl.position.set(0,PH,0);sc.add(fl);
+// stars, sun, moon
+const sp=[],SR=rng(ds+9);for(let i=0;i<800;i++){const u=SR()*6.283,v=.05+SR()*.95,r=Math.sqrt(1-v*v)*380;sp.push(Math.cos(u)*r,v*380,Math.sin(u)*r)}
+const sg=new THREE.BufferGeometry();sg.setAttribute('position',new THREE.Float32BufferAttribute(sp,3));
+const sm=new THREE.PointsMaterial({color:0xffffff,size:2.2,sizeAttenuation:false,transparent:true,fog:false,depthWrite:false}),stars=new THREE.Points(sg,sm);stars.frustumCulled=false;sc.add(stars);
+function glow(c1,c2){const k=document.createElement('canvas');k.width=k.height=128;const x=k.getContext('2d'),g=x.createRadialGradient(64,64,0,64,64,64);g.addColorStop(0,c1);g.addColorStop(.25,c1);g.addColorStop(1,c2);x.fillStyle=g;x.fillRect(0,0,128,128);const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(k),transparent:true,fog:false,depthWrite:false}));return s}
+const sunS=glow('rgba(255,236,190,1)','rgba(255,170,80,0)'),moonS=glow('rgba(240,240,220,1)','rgba(200,210,255,0)');sunS.scale.setScalar(120);moonS.scale.setScalar(55);sc.add(sunS,moonS);
+// avatars
+function label(t){const k=document.createElement('canvas');k.width=256;k.height=64;const x=k.getContext('2d');x.font='700 30px system-ui,sans-serif';x.textAlign='center';x.textBaseline='middle';x.lineWidth=6;x.strokeStyle='rgba(0,0,0,.7)';x.strokeText(t,128,32);x.fillStyle='#fff';x.fillText(t,128,32);const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(k),depthTest:false,transparent:true,fog:false}));s.scale.set(5,1.25,1);s.position.y=3.2;s.renderOrder=9;return s}
+function avatar(c,n){const g=new THREE.Group(),L=x=>new THREE.MeshLambertMaterial({color:x});
+ const b=new THREE.Mesh(new THREE.CylinderGeometry(.45,.5,1.3,10),L(c)),h=new THREE.Mesh(new THREE.SphereGeometry(.38,12,10),L('#f2c9a0')),p=new THREE.Mesh(new THREE.BoxGeometry(.7,.9,.35),L('#8a4b2a'));
+ b.position.y=1;h.position.y=1.95;p.position.set(0,1.1,-.5);g.add(b,h,p);const lb=label(n);g.add(lb);g.userData={lb,n};return g}
+const rename=(g,n)=>{if(g.userData.n===n)return;g.remove(g.userData.lb);const l=label(n);g.add(l);g.userData={lb:l,n}};
+const nm=()=>($('#nm').value.trim()||'등산객').slice(0,10);
+$('#nm').value=(()=>{try{return localStorage.getItem('nm')}catch(e){}})()||'등산객'+(100+Math.random()*900|0);
+$('#nm').onchange=()=>{try{localStorage.setItem('nm',$('#nm').value)}catch(e){}};
+const mc=`hsl(${Math.random()*360|0},80%,60%)`,mg=avatar(mc,nm());sc.add(mg);
+const lamp=new THREE.PointLight(0xffd9a0,0,28);lamp.position.y=2.6;mg.add(lamp);
+const me={x:Math.cos(A0)*D0S,z:Math.sin(A0)*D0S,r:0};let yaw=Math.atan2(me.x,me.z),pit=.38;
+const peersG=new Map();let room=null,dl=null,lastSent=0;
+// input
+const keys={};addEventListener('keydown',e=>{if(/INPUT|SELECT/.test(e.target.tagName))return;keys[e.key.toLowerCase()]=1});addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=0});
+const js=$('#js'),kn=$('#kn');let jid=null,jx=0,jy=0;
+function jm(e){const r=js.getBoundingClientRect(),Rr=r.width/2;let dx=e.clientX-r.left-Rr,dy=e.clientY-r.top-Rr;const d=Math.hypot(dx,dy),m=Math.min(d,Rr*.7);if(d>0){dx*=m/d;dy*=m/d}jx=dx/(Rr*.7);jy=-dy/(Rr*.7);kn.style.transform=`translate(${dx}px,${dy}px)`}
+js.addEventListener('pointerdown',e=>{jid=e.pointerId;js.setPointerCapture(jid);jm(e)});
+js.addEventListener('pointermove',e=>{if(e.pointerId===jid)jm(e)});
+const je=e=>{if(e.pointerId===jid){jid=null;jx=jy=0;kn.style.transform=''}};js.addEventListener('pointerup',je);js.addEventListener('pointercancel',je);
+let did=null,lx=0,ly=0;const st=$('#stage');
+st.addEventListener('pointerdown',e=>{if(e.target!==cv||did!==null)return;did=e.pointerId;lx=e.clientX;ly=e.clientY;cv.setPointerCapture(did)});
+st.addEventListener('pointermove',e=>{if(e.pointerId!==did)return;yaw-=(e.clientX-lx)*.006;pit=clamp(pit+(e.clientY-ly)*.005,.08,1.1);lx=e.clientX;ly=e.clientY});
+const de=e=>{if(e.pointerId===did)did=null};st.addEventListener('pointerup',de);st.addEventListener('pointercancel',de);
+cv.addEventListener('wheel',e=>{zoom=clamp(zoom+e.deltaY*.01,5,18)},{passive:true});let zoom=10;
+const coarse=matchMedia('(pointer:coarse)').matches;
+$('#hint').textContent=coarse?'왼쪽 조이스틱으로 이동 · 화면을 끌어 시점 회전':'조이스틱 또는 WASD·방향키로 이동 · 마우스로 끌어 시점 회전';
+$('#cam').textContent=coarse?'📷 정상 인증샷':'📷 정상 인증샷 (화면 저장)';
+function resize(){const r=st.getBoundingClientRect();rd.setSize(r.width,r.height,false);cam.aspect=r.width/r.height;cam.updateProjectionMatrix()}
+new ResizeObserver(resize).observe(st);resize();
+function hour(){const v=$('#tm').value;if(v!=='auto')return +v;const d=new Date();return d.getHours()+d.getMinutes()/60}
+function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.display='none',2600)}
+function push(f){if(!room)return;const t=Date.now();if(!f&&t-lastSent<80)return;lastSent=t;room.presence({n:nm(),c:mc,x:+me.x.toFixed(2),z:+me.z.toFixed(2),r:+me.r.toFixed(2)}).catch(()=>{})}
+function env(h,T){const[t,b]=sky(h),sa=starA(h);
+ const g=bgx.createLinearGradient(0,0,0,256);g.addColorStop(0,css(t));g.addColorStop(.7,css(b));g.addColorStop(1,css(b));bgx.fillStyle=g;bgx.fillRect(0,0,2,256);bgt.needsUpdate=true;
+ sc.fog.color.setRGB(b[0]/255,b[1]/255,b[2]/255);
+ const day=h>=5.5&&h<=19,u=(h-5.5)/13.5,th=u*Math.PI,low=day?1-Math.sin(th):1;
+ const sd=new THREE.Vector3(-Math.cos(th),Math.sin(th),-.35).normalize();
+ sunS.visible=day;sunS.position.copy(cam.position).addScaledVector(sd,320);sunS.material.color.setRGB(1,1-low*.35,1-low*.6);
+ const nu=clamp((h>=19?h-19:h+5)/10.5,0,1),md=new THREE.Vector3(-Math.cos(nu*Math.PI),Math.sin(nu*Math.PI),.3).normalize();
+ moonS.visible=sa>0;moonS.material.opacity=sa;moonS.position.copy(cam.position).addScaledVector(md,320);
+ stars.position.copy(cam.position);sm.opacity=sa*(.8+.2*Math.sin(T*3));
+ const sI=day?Math.sin(th)*.95+.1:0;sun.color.setRGB(1,1-low*.45,1-low*.7);sun.intensity=sI;
+ sun.position.copy(me3).addScaledVector(day?sd:md,60);sun.target.position.copy(me3);if(!day){sun.color.set('#9fb4ff');sun.intensity=.25*sa}
+ hemi.color.setRGB(t[0]/255,t[1]/255,t[2]/255);hemi.groundColor.set('#2c3b2c');hemi.intensity=.25+.7*(1-sa);
+ lamp.intensity=sa*1.4;}
+const me3=new THREE.Vector3();
+let last=performance.now(),was=false,hh=-1,fr=0;
+function loop(now){requestAnimationFrame(loop);const dt=Math.min(.1,(now-last)/1000);last=now;const T=now/1000;
+ let ix=jx,iy=jy;if(keys.w||keys.arrowup)iy+=1;if(keys.s||keys.arrowdown)iy-=1;if(keys.d||keys.arrowright)ix+=1;if(keys.a||keys.arrowleft)ix-=1;
+ const mag=Math.min(1,Math.hypot(ix,iy));
+ if(mag>.05){const fx=-Math.sin(yaw),fz=-Math.cos(yaw),rx=Math.cos(yaw),rz=-Math.sin(yaw);let dx=fx*iy+rx*ix,dz=fz*iy+rz*ix;const l=Math.hypot(dx,dz);dx/=l;dz/=l;
+  const sl=clamp(1-Math.abs(hAt(me.x+dx,me.z+dz)-hAt(me.x,me.z))*.5,.35,1);
+  me.x+=dx*8*mag*sl*dt;me.z+=dz*8*mag*sl*dt;const r=Math.hypot(me.x,me.z);if(r>290){me.x*=290/r;me.z*=290/r}me.r=Math.atan2(dx,dz);push()}
+ const my=hAt(me.x,me.z);mg.position.set(me.x,my,me.z);mg.rotation.y=me.r;me3.set(me.x,my,me.z);rename(mg,nm());
+ const d=Math.hypot(me.x,me.z),p=clamp(1-(d-4)/(D0S-4),0,1),top=d<=4.5;
+ $('#prog i').style.width=(top?100:p*100)+'%';$('#pc').textContent=top?'정상!':'정상까지 '+Math.round(d)+'m';
+ $('#cam').disabled=!top;if(top&&!was)toast('🎉 정상 도착! 인증샷을 찍어 보세요');was=top;
+ const cd=zoom,cy=my+1.6;let cx=me.x+Math.sin(yaw)*Math.cos(pit)*cd,cz=me.z+Math.cos(yaw)*Math.cos(pit)*cd,cyy=cy+Math.sin(pit)*cd;cyy=Math.max(cyy,hAt(cx,cz)+1.5);
+ cam.position.set(cx,cyy,cz);cam.lookAt(me.x,my+1.5,me.z);
+ // peers
+ let n=1;if(room){const seen=new Set();for(const q of room.peers()){if(q.isMe&&q.sameTab)continue;const s=q.presence;if(typeof s.x!=='number')continue;seen.add(q.peer);n++;
+   let o=peersG.get(q.peer);if(!o){const c=/^hsl\(\d+,80%,60%\)$/.test(s.c)?s.c:'#cccccc';o={g:avatar(c,String(s.n||'등산객').slice(0,10))};o.g.position.set(s.x,0,s.z);sc.add(o.g);peersG.set(q.peer,o)}
+   rename(o.g,String(s.n||'등산객').slice(0,10));const tx=clamp(s.x,-295,295),tz=clamp(s.z,-295,295);o.g.position.x+=(tx-o.g.position.x)*.2;o.g.position.z+=(tz-o.g.position.z)*.2;o.g.position.y=hAt(o.g.position.x,o.g.position.z);o.g.rotation.y=+s.r||0}
+  for(const[k,o]of peersG)if(!seen.has(k)){sc.remove(o.g);peersG.delete(k)}}
+ $('#cnt').textContent=`접속 ${n}명`;
+ const h=hour();if(fr++%3===0||h!==hh){env(h,T);hh=h;const d2=new Date();$('#clk').textContent=`${d2.getMonth()+1}/${d2.getDate()} · ${h<5.5||h>=19.5?'🌙 밤':h<12?'🌅 아침':h<17?'☀️ 오후':'🌇 노을'}`}
+ rd.render(sc,cam)}
+requestAnimationFrame(loop);
+// chat
+const log=$('#log');
+function add(n,t,mine,sys){const d=document.createElement('div');if(sys){d.className='sys';d.textContent=t}else{if(mine)d.className='me';const b=document.createElement('b');b.textContent=n+' ';d.append(b,document.createTextNode(t))}log.append(d);while(log.children.length>100)log.firstChild.remove();log.scrollTop=log.scrollHeight}
+add('','오늘의 산은 '+mt[0]+'입니다. 매일 자정에 새로운 산으로 바뀝니다.',0,1);
+$('#tg').onclick=()=>{const c=$('#chat');c.style.display=c.style.display==='flex'?'none':'flex';if(c.style.display==='flex')log.scrollTop=log.scrollHeight};
+function send(){const t=$('#ci').value.trim();if(!t)return;$('#ci').value='';if(!room){add(nm(),t,1);return}
+ room.emit('chat',{n:nm(),t:t.slice(0,200)}).catch(()=>add('','메시지를 보낼 수 없습니다. 채팅 권한을 확인해 주세요.',0,1))}
+$('#cs').onclick=send;$('#ci').onkeydown=e=>{e.stopPropagation();if(e.key==='Enter'&&!e.isComposing)send()};
+// photo
+let blob=null;
+async function stamp(src,w,h){const s=Math.min(1,1600/Math.max(w,h)),c=document.createElement('canvas');c.width=w*s|0;c.height=h*s|0;const x=c.getContext('2d');x.drawImage(src,0,0,c.width,c.height);
+ const d=new Date(),p=n=>String(n).padStart(2,'0'),wd='일월화수목금토'[d.getDay()];
+ const l1=`${d.getFullYear()}.${p(d.getMonth()+1)}.${p(d.getDate())} (${wd}) ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`,l2=`${mt[0]} 정상 · ${mt[1].toLocaleString()}m · ${nm()}`;
+ const fs=Math.max(18,c.width/26|0),pad=fs*.7,gr=x.createLinearGradient(0,c.height-fs*4,0,c.height);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(0,0,0,.65)');x.fillStyle=gr;x.fillRect(0,c.height-fs*4,c.width,fs*4);
+ x.font=`700 ${fs}px system-ui,sans-serif`;x.textBaseline='bottom';x.textAlign='left';x.shadowColor='#000';x.shadowBlur=fs/3;
+ x.fillStyle='#fff';x.fillText(l2,pad,c.height-pad);x.fillStyle='#ffd27a';x.fillText(l1,pad,c.height-pad-fs*1.35);
+ blob=await new Promise(r=>c.toBlob(r,'image/jpeg',.92));blob.stamp=`${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+ $('#pv').src=URL.createObjectURL(blob);$('#ov').style.display='flex'}
+$('#cam').onclick=async()=>{if(coarse){$('#file').click();return}
+ try{rd.render(sc,cam);await stamp(cv,cv.width,cv.height)}catch(e){toast('화면을 캡처하지 못했어요')}};
+$('#file').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{const im=await createImageBitmap(f);await stamp(im,im.width,im.height)}catch(err){toast('사진을 불러오지 못했어요')}};
+$('#cl').onclick=()=>$('#ov').style.display='none';
+$('#sv').onclick=async()=>{if(!blob)return;if(!dl){toast('저장 기능을 쓸 수 없어요. 이미지를 길게 누르거나 우클릭해 저장해 보세요');return}
+ try{await dl.save({filename:`인증샷_${mt[0]}_${blob.stamp}.jpg`,data:blob});toast('저장 완료!');$('#ov').style.display='none'}catch(e){if(e&&e.code!=='declined')toast('저장하지 못했어요')}};
+(async()=>{if(!(window.claude&&claude.use))return;
+ try{dl=await claude.use('downloads')}catch(e){}
+ try{room=await claude.use('room')}catch(e){}
+ if(room){room.on('chat',m=>{const d=m.data||{};add(String(d.n||'등산객').slice(0,10),String(d.t||'').slice(0,200),m.isMe)});room.onPeers(()=>{});push(1);add('','실시간 연결됨 — 같은 산에 있는 사람들과 채팅할 수 있어요.',0,1)}
+ else add('','실시간 연결을 사용할 수 없어 혼자 등산 중입니다.',0,1)})();
+</script></body></html>
